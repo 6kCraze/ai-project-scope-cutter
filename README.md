@@ -4,7 +4,7 @@
 
 Project Scope Cutter is a small full-stack Next.js app that turns a huge project idea into something you can realistically build in **30 or 60 minutes**.
 
-You give it the version of the idea with every feature you can think of. It gives you back a focused MVP, a short build plan, the features to save for later, a simple tech stack, a definition of done, and a prompt you can paste into an AI coding tool.
+You give it the version of the idea with every feature you can think of. It gives you back a focused MVP, a short build plan, the features to save for later, a simple tech stack, a definition of done, and a detailed implementation brief.
 
 ## Why I built it
 
@@ -93,6 +93,18 @@ DEMO_MODE=false
 ```
 
 The API key is only read inside the server route. It is never sent to the browser or included in the repository.
+
+## Deploy to Vercel
+
+The project is set up for a standard Vercel deployment. It does not need a database or any other hosted service.
+
+1. Import the GitHub repository into Vercel.
+2. Keep the default Next.js build settings.
+3. Deploy without environment variables to use demo mode.
+4. Add `OPENAI_API_KEY` in the Vercel project settings when you want live OpenAI responses.
+5. Redeploy after adding or changing environment variables.
+
+The demo fallback is part of the server route, so the deployed site remains fully usable even when no API key is configured.
 
 ## Project structure
 
