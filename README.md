@@ -1,44 +1,90 @@
 # Project Scope Cutter
 
-Turn an overambitious product idea into a focused MVP you can ship in 30 or 60 minutes.
+[![Quality checks](https://github.com/6kCraze/ai-project-scope-cutter/actions/workflows/ci.yml/badge.svg)](https://github.com/6kCraze/ai-project-scope-cutter/actions/workflows/ci.yml)
 
-Project Scope Cutter takes a messy idea, finds one valuable workflow, and returns a practical build plan: what to build now, what to defer, a minimal stack, a definition of done, sensible V2 ideas, and a ready-to-paste AI coding prompt.
+Project Scope Cutter is a small full-stack Next.js app that turns a huge project idea into something you can realistically build in **30 or 60 minutes**.
 
-## Features
+You give it the version of the idea with every feature you can think of. It gives you back a focused MVP, a short build plan, the features to save for later, a simple tech stack, a definition of done, and a prompt you can paste into an AI coding tool.
 
-- 30-minute and 60-minute build plans
-- Strict OpenAI Structured Outputs with runtime validation
-- Useful template-based demo mode when no API key is configured
-- Seven clear result sections with individual copy controls
-- Full-plan and coding-prompt copy actions
-- Responsive dark interface with loading and error states
-- Three example projects and a live character count
-- No accounts, database, analytics, or client-side secrets
-- Generated favicon, Apple touch icon, and social preview image
+## Why I built it
 
-## Quick start
+I like starting projects, but it is easy to turn a simple idea into a giant list of features before writing any code. Accounts, analytics, payments, dashboards, social features, and integrations all sound useful, but most of them do not belong in the first version.
 
-Requirements: Node.js 20.9 or newer and npm.
+I built this tool to force one decision: **what is the smallest useful version I can finish today?**
+
+The goal is not to make the idea less interesting. The goal is to make the first version small enough to ship.
+
+## What it does
+
+1. Enter a project idea in your own words.
+2. Pick a 30-minute or 60-minute timebox.
+3. Click **Cut My Scope**.
+4. Get a complete plan with:
+   - MVP summary
+   - What to build now
+   - What to cut for later
+   - Recommended stack
+   - Definition of done
+   - Future V2 features
+   - A ready-to-paste coding prompt
+
+Each section has a copy button, and the whole plan can be copied at once.
+
+## How I worked through it
+
+I built the project in small passes instead of trying to finish everything at once.
+
+- I started with the main form and the 30/60-minute selector.
+- I added the API route and made OpenAI return a strict JSON shape instead of unpredictable text.
+- I added runtime validation on the server and in the browser so broken AI responses never reach the UI.
+- I built a real demo mode so the project still works without an API key.
+- I fixed local origin handling after browser testing found a `localhost` and `127.0.0.1` mismatch.
+- I tested both timeboxes and adjusted the output so a 60-minute plan actually includes more than a 30-minute plan.
+- I added loading, connection-error, character-limit, keyboard, copy, and mobile states.
+- I finished with metadata, social images, API tests, CI, and a production build.
+
+That process kept the app small while still making it feel complete.
+
+## Tech stack
+
+- **Next.js App Router** for the UI and API route
+- **TypeScript** for shared request and response types
+- **Tailwind CSS** plus custom CSS for the responsive interface
+- **OpenAI Responses API** with strict Structured Outputs
+- **Vercel** for deployment
+
+There is no authentication, database, dashboard, or client-side API key. The app only keeps the current result in browser memory.
+
+## Run it locally
+
+You need Node.js 20.9 or newer.
 
 ```bash
 git clone https://github.com/6kCraze/ai-project-scope-cutter.git
 cd ai-project-scope-cutter
 npm install
-cp .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The app works immediately in demo mode.
+Open [http://localhost:3000](http://localhost:3000).
 
-On Windows PowerShell, create the environment file with:
+The app starts in demo mode, so you can use the full interface without setting up OpenAI.
+
+## Use OpenAI mode
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+For PowerShell:
 
 ```powershell
 Copy-Item .env.example .env.local
 ```
 
-## OpenAI setup
-
-Add a server-side API key to `.env.local` to enable AI-generated plans:
+Then add your server-side key to `.env.local`:
 
 ```dotenv
 OPENAI_API_KEY=your_key_here
@@ -46,92 +92,45 @@ OPENAI_MODEL=gpt-4.1-mini
 DEMO_MODE=false
 ```
 
-`OPENAI_API_KEY` is read only by the route handler and is never sent to the browser. If the key is absent, or `DEMO_MODE=true`, the API returns a clearly labeled deterministic demo plan.
+The API key is only read inside the server route. It is never sent to the browser or included in the repository.
 
-## How it works
-
-```text
-Browser form
-    │  project idea + 30/60 minute timebox
-    ▼
-POST /api/scope
-    ├─ validate request, origin, type, and body size
-    ├─ OPENAI_API_KEY present → Responses API + strict JSON Schema
-    └─ key absent → category-aware demo plan
-    │
-    ▼
-validate all seven response fields
-    │
-    ▼
-responsive result cards + copy actions
-```
-
-The OpenAI route uses the Responses API with `strict: true`, an explicit JSON Schema, bounded output, a timeout, and no response storage. The response is validated again before it leaves the server and once more before the client renders it.
-
-## Project architecture
+## Project structure
 
 ```text
 src/
 ├── app/
-│   ├── api/scope/route.ts    # request guardrails, OpenAI call, demo fallback
+│   ├── api/scope/route.ts    # OpenAI request and demo fallback
+│   ├── globals.css           # responsive dark UI
 │   ├── layout.tsx            # metadata and fonts
-│   ├── page.tsx              # server entry point and mode detection
-│   ├── globals.css           # design system and responsive layout
-│   └── *-icon / og image     # generated brand assets
+│   └── page.tsx              # page entry point
 ├── components/
-│   └── scope-cutter.tsx      # complete interactive experience
+│   └── scope-cutter.tsx      # form, states, results, and copy actions
 └── lib/
-    ├── scope.ts              # shared types, schema, parsing, validation
-    └── demo.ts               # deterministic preview-mode plans
-tests/
-├── scope.test.mjs            # validation and demo-plan unit tests
-└── api.test.mjs              # running-server route integration tests
+    ├── demo.ts               # local demo plan generator
+    └── scope.ts              # types, JSON schema, and validation
 ```
 
-## Scripts
+## Validation and testing
+
+The API checks the idea length, selected timebox, request size, content type, and request origin. AI output must match the exact seven-field response contract before it is rendered.
 
 ```bash
-npm run dev        # local development
-npm run lint       # ESLint
-npm run typecheck  # generate route types and run TypeScript
-npm test           # unit tests
-npm run build      # production build
-npm run start      # serve the production build
-npm run test:api   # API integration tests; requires the app on port 3000
+npm run lint
+npm run typecheck
+npm test
+npm run build
 ```
 
-## Deploy to Vercel
+GitHub Actions runs these checks on every push and pull request.
 
-1. Import this GitHub repository in Vercel.
-2. Add `OPENAI_API_KEY` as an encrypted environment variable if you want live AI plans.
-3. Optionally set `OPENAI_MODEL`; the default is `gpt-4.1-mini`.
-4. Deploy. No other services or build settings are required.
+## What I would add next
 
-Every branch and pull request runs lint, type checking, unit tests, and a production build through GitHub Actions.
+- A way to refine a plan while keeping the same timebox
+- Stack presets for web apps, scripts, mobile apps, and automations
+- Shareable plan links with no personal project data exposed
+- Streaming progress for slower AI responses
 
-## Response contract
-
-```json
-{
-  "mvpSummary": "",
-  "buildNow": [],
-  "cutForLater": [],
-  "recommendedStack": [],
-  "definitionOfDone": [],
-  "futureFeatures": [],
-  "codingPrompt": ""
-}
-```
-
-All fields are required. Unknown fields, empty strings, oversized values, and invalid arrays are rejected before rendering.
-
-## Future improvements
-
-- Let users refine one plan without expanding its timebox
-- Add shareable, privacy-safe result links
-- Offer stack presets for web apps, scripts, mobile apps, and automations
-- Track anonymous success signals only after validating demand
-- Add streaming progress for slower model responses
+I would only add these after seeing how people use the current version. The whole point of this project is to ship the focused version first.
 
 ## License
 
