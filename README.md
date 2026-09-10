@@ -30,7 +30,17 @@ The goal is not to make the idea less interesting. The goal is to make the first
    - Future V2 features
    - A ready-to-paste coding prompt
 
-Each section has a copy button, and the whole plan can be copied at once.
+The second version turns that plan into a small workspace:
+
+- Choose your experience level, familiar stack, and whether setup is already done.
+- Compare 30- and 60-minute plans side by side.
+- Follow ordered tasks with an explicit time budget and a reason for each step.
+- Cut or restore optional work. The remaining time becomes a buffer, and the coding prompt updates with the same decisions.
+- Check off tasks and acceptance criteria, and log actual minutes against estimates.
+- Save up to 10 plans in your browser, reopen them later, or delete them.
+- Export the edited plan and build log as Markdown, or copy the full plan and coding prompt.
+
+The public version runs the planner in the browser. It needs no account, API key, database, or paid AI service.
 
 ## How I worked through it
 
@@ -45,7 +55,9 @@ I built the project in small passes instead of trying to finish everything at on
 - I added loading, connection-error, character-limit, keyboard, copy, and mobile states.
 - I finished with metadata, social images, API tests, CI, and a production build.
 
-That process kept the app small while still making it feel complete.
+The next issue was that a generated plan was easy to read but hard to act on. I added task editing, progress tracking, a timebox comparison, and a build log. The main challenge was keeping the plan consistent: cutting local saving should also remove it from the stack and the implementation instructions.
+
+I moved those decisions into a pure planning module and added a 90-case evaluation matrix. This checks budget totals and valid output across project ideas, experience levels, stacks, and both timeboxes. It tests consistency, not whether every developer can meet the estimate; that needs real usage feedback.
 
 ## Tech stack
 
@@ -55,7 +67,7 @@ That process kept the app small while still making it feel complete.
 - **OpenAI Responses API** with strict Structured Outputs
 - **Vercel** for deployment
 
-There is no authentication, database, dashboard, or client-side API key. The app only keeps the current result in browser memory.
+There is no authentication, database, dashboard, or client-side API key. Saved plans stay in versioned localStorage on the current browser. Saving is explicit; clearing browser data removes them, so Markdown export provides a portable copy.
 
 ## Run it locally
 
@@ -72,7 +84,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 The app starts in demo mode, so you can use the full interface without setting up OpenAI.
 
-## Use OpenAI mode
+## Optional local AI
 
 Copy the example environment file:
 
@@ -94,7 +106,9 @@ OPENAI_MODEL=gpt-4.1-mini
 DEMO_MODE=false
 ```
 
-The API key is only read inside the server route. It is never sent to the browser or included in the repository.
+Restart `npm run dev` after editing the environment file. The API key is only read inside the local server route. It is never sent to the browser or saved with plans.
+
+OpenAI usage may cost money and is billed to the key owner. It is entirely optional. The public deployment does not accept visitors' keys. Production builds and Vercel deployments always use the free planner, even if a key is accidentally configured. Local AI requires development mode, a key, and demo mode disabled.
 
 ## Deploy to Vercel
 
@@ -103,10 +117,10 @@ The project is set up for a standard Vercel deployment. It does not need a datab
 1. Import the GitHub repository into Vercel.
 2. Keep the default Next.js build settings.
 3. Deploy without environment variables to use demo mode.
-4. Add `OPENAI_API_KEY` in the Vercel project settings when you want live OpenAI responses.
-5. Redeploy after adding or changing environment variables.
+4. Push changes to `main` to trigger the connected Vercel deployment.
+5. Keep paid provider keys out of the Vercel environment; AI is a local development option.
 
-The demo fallback is part of the server route, so the deployed site remains fully usable even when no API key is configured.
+The public UI generates plans locally without calling the API. The API route also enforces the free production mode. The app adds no paid services or API usage; hosting remains subject to your Vercel account limits.
 
 ## Project structure
 
@@ -118,8 +132,11 @@ src/
 │   ├── layout.tsx            # metadata and fonts
 │   └── page.tsx              # page entry point
 ├── components/
-│   └── scope-cutter.tsx      # form, states, results, and copy actions
+│   ├── scope-cutter.tsx      # form, preferences, local saved-plan library
+│   └── plan-workspace.tsx    # task editing, progress, comparison, export
 └── lib/
+    ├── ai-mode.ts            # production guard for optional local AI
+    ├── planner.ts            # budgets, edited results, saved-plan validation
     ├── demo.ts               # local demo plan generator
     └── scope.ts              # types, JSON schema, and validation
 ```
@@ -135,16 +152,20 @@ npm test
 npm run build
 ```
 
-GitHub Actions runs these checks on every push and pull request.
+GitHub Actions runs these checks on every push and pull request. The tests cover request and response boundaries, 90 generated plan combinations, task cuts, persistence validation, and the production AI guard.
+
+For API integration checks, start the app first, then run `npm run test:api`. Set `TEST_BASE_URL` if the server uses another port.
+
+Browser checks cover generation, editing, save/reload, comparison, and desktop/mobile layout. The public plan generator is deterministic; no paid provider request is needed for testing.
 
 ## What I would add next
 
-- A way to refine a plan while keeping the same timebox
-- Stack presets for web apps, scripts, mobile apps, and automations
-- Shareable plan links with no personal project data exposed
-- Streaming progress for slower AI responses
+- Test the plans with developers and compare estimated time with their actual build logs.
+- Add more domain-specific templates for ideas outside the current categories.
+- Improve task estimates using that feedback instead of claiming every project fits perfectly.
+- Add optional file import for sharing saved plans across browsers.
 
-I would only add these after seeing how people use the current version. The whole point of this project is to ship the focused version first.
+The current estimates are heuristics, not promises. Generic ideas get a generic prototype plan. That tradeoff keeps the public app fast, private, and free of AI API charges.
 
 ## License
 

@@ -1,3 +1,4 @@
+import { localAIEnabled } from "@/lib/ai-mode";
 import OpenAI from "openai";
 import { createDemoScope } from "@/lib/demo";
 import { isScopeResult, parseScopeRequest, scopeJsonSchema } from "@/lib/scope";
@@ -79,8 +80,7 @@ export async function POST(request: Request) {
       400,
     );
 
-  const demo =
-    process.env.DEMO_MODE === "true" || !process.env.OPENAI_API_KEY?.trim();
+  const demo = !localAIEnabled(process.env);
   try {
     if (demo) {
       const result = createDemoScope(input.idea, input.minutes);

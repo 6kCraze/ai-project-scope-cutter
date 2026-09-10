@@ -2,14 +2,16 @@
 
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
-import { EXAMPLES } from "@/lib/demo";
+import PlanWorkspace from "./plan-workspace";
 import {
-  formatScope,
-  isScopeResult,
-  MAX_IDEA_LENGTH,
-  type BuildMinutes,
-  type ScopeResult,
-} from "@/lib/scope";
+  createTasks,
+  defaults,
+  validPlan,
+  type Plan,
+  type Preferences,
+} from "@/lib/planner";
+import { createDemoScope, EXAMPLES } from "@/lib/demo";
+import { isScopeResult, MAX_IDEA_LENGTH, type BuildMinutes } from "@/lib/scope";
 
 type IconName =
   | "cut"
@@ -75,119 +77,58 @@ function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   );
 }
 
-function CopyButton({
-  text,
-  label = "Copy",
-  name,
-}: {
-  text: string;
-  label?: string;
-  name: string;
-}) {
-  const [state, setState] = useState<"idle" | "copied" | "error">("idle");
-  async function copy() {
-    try {
-      try {
-        if (!navigator.clipboard?.writeText) throw new Error();
-        await navigator.clipboard.writeText(text);
-      } catch {
-        const field = document.createElement("textarea");
-        field.value = text;
-        field.setAttribute("readonly", "");
-        field.style.cssText = "position:fixed;opacity:0;pointer-events:none";
-        document.body.appendChild(field);
-        field.select();
-        const copied = document.execCommand("copy");
-        field.remove();
-        if (!copied) throw new Error();
-      }
-      setState("copied");
-      setTimeout(() => setState("idle"), 2200);
-    } catch {
-      setState("error");
-    }
-  }
-  return (
-    <span className="copy-wrap">
-      <button
-        type="button"
-        className="copy-button"
-        onClick={copy}
-        aria-label={`Copy ${name}`}
-      >
-        <Icon name={state === "copied" ? "check" : "copy"} size={15} />
-        <span>{state === "copied" ? "Copied!" : label}</span>
-      </button>
-      <span
-        className={state === "error" ? "copy-error" : "sr-only"}
-        role="status"
-      >
-        {state === "error"
-          ? "Clipboard unavailable. Select and copy the text below."
-          : state === "copied"
-            ? `${name} copied`
-            : ""}
-      </span>
-    </span>
-  );
-}
-
-function ResultCard({
-  title,
-  subtitle,
-  items,
-  icon,
-  tone = "neutral",
-}: {
-  title: string;
-  subtitle: string;
-  items: string[];
-  icon: IconName;
-  tone?: string;
-}) {
-  return (
-    <section className={`result-card ${tone}`}>
-      <div className="card-top">
-        <span className="card-icon">
-          <Icon name={icon} />
-        </span>
-        <CopyButton
-          text={items.map((item) => `- ${item}`).join("\n")}
-          name={title}
-        />
-      </div>
-      <h3>{title}</h3>
-      <p className="card-subtitle">{subtitle}</p>
-      <ul className="result-list">
-        {items.map((item, i) => (
-          <li key={`${i}-${item}`}>
-            <span className="list-marker">
-              {tone === "keep" ? (
-                <Icon name="check" size={14} />
-              ) : tone === "cut" ? (
-                <Icon name="close" size={13} />
-              ) : (
-                <span />
-              )}
-            </span>
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 export default function ScopeCutter({ demo }: { demo: boolean }) {
   const [idea, setIdea] = useState("");
   const [minutes, setMinutes] = useState<BuildMinutes>(30);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [output, setOutput] = useState<{
-    result: ScopeResult;
-    mode: "ai" | "demo";
-    minutes: BuildMinutes;
-  } | null>(null);
+  const [preferences, setPreferences] = useState<Preferences>(defaults);
+  const [output, setOutput] = useState<Plan | null>(null);
+  const [saved, setSaved] = useState<Plan[]>([]);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const storageKey = "scope-cutter-plans-v2";
+  function readSaved() {
+    try {
+      const raw: unknown = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      if (!Array.isArray(raw) || !raw.every((p) => validPlan(p, isScopeResult)))
+        throw new Error();
+      return raw.slice(0, 10) as Plan[];
+    } catch {
+      setNotice(
+        "Saved plans could not be read. You can still build and export a new plan.",
+      );
+      return [];
+    }
+  }
+  function savePlan() {
+    if (!output) return;
+    const next = [
+      { ...output, savedAt: new Date().toISOString() },
+      ...readSaved().filter((p) => p.id !== output.id),
+    ].slice(0, 10);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+      setSaved(next);
+      setNotice(
+        "Saved in this browser. Save again after changing your progress.",
+      );
+    } catch {
+      setNotice(
+        "Browser storage is unavailable or full. Export Markdown to keep your plan.",
+      );
+    }
+  }
+  function removePlan(id: string) {
+    const next = readSaved().filter((p) => p.id !== id);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(next));
+      setSaved(next);
+      setNotice("Plan removed from this browser.");
+    } catch {
+      setNotice("Could not update browser storage.");
+    }
+  }
   const resultsRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const valid = idea.trim().length >= 10;
@@ -209,37 +150,40 @@ export default function ScopeCutter({ demo }: { demo: boolean }) {
     setError("");
     setOutput(null);
     try {
-      const response = await fetch("/api/scope", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idea: idea.trim(), minutes }),
-        signal: AbortSignal.timeout(55000),
-      });
-      const data: unknown = await response.json();
-      if (typeof data !== "object" || data === null)
-        throw new Error(
-          "We received an unreadable response. Please try again.",
-        );
-      if (!response.ok)
-        throw new Error(
-          "error" in data && typeof data.error === "string"
-            ? data.error
-            : "Something went wrong. Please try again.",
-        );
-      if (
-        !("result" in data) ||
-        !isScopeResult(data.result) ||
-        !("mode" in data) ||
-        !["demo", "ai"].includes(String(data.mode))
-      )
-        throw new Error(
-          "The plan didn’t pass our format checks. Please try again.",
-        );
+      let result = createDemoScope(idea.trim(), minutes);
+      let mode: "ai" | "demo" = "demo";
+      if (!demo) {
+        const response = await fetch("/api/scope", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idea: idea.trim(), minutes }),
+          signal: AbortSignal.timeout(55000),
+        });
+        const data = await response.json();
+        if (!response.ok)
+          throw new Error(data.error || "Could not generate this plan.");
+        if (!isScopeResult(data.result) || !["ai", "demo"].includes(data.mode))
+          throw new Error("The plan did not pass validation.");
+        result = data.result;
+        mode = data.mode;
+      }
+      if (!isScopeResult(result))
+        throw new Error("The plan did not pass validation.");
       setOutput({
-        result: data.result,
-        mode: data.mode as "ai" | "demo",
+        id: crypto.randomUUID(),
+        idea: idea.trim(),
+        base: result,
+        mode,
         minutes,
+        preferences: { ...preferences },
+        tasks: createTasks(result, minutes, preferences),
+        excluded: [],
+        completed: [],
+        checks: [],
+        actual: {},
+        savedAt: "",
       });
+      setNotice("");
       requestAnimationFrame(() => {
         resultsRef.current?.scrollIntoView({
           behavior: window.matchMedia("(prefers-reduced-motion: reduce)")
@@ -331,7 +275,7 @@ export default function ScopeCutter({ demo }: { demo: boolean }) {
               <span>
                 <span className="tiny-square" /> THE SCOPE CUTTER
               </span>
-              <span>v1.0</span>
+              <span>v2.0</span>
             </div>
             <form className="cutter-form" onSubmit={submit} aria-busy={loading}>
               <div className="form-heading">
@@ -397,6 +341,56 @@ export default function ScopeCutter({ demo }: { demo: boolean }) {
                   ? "One core feature. The smallest version that works."
                   : "One core feature, local saving, and room for polish."}
               </p>
+              <div className="preferences-grid">
+                <label>
+                  Your experience
+                  <select
+                    disabled={loading}
+                    value={preferences.experience}
+                    onChange={(e) =>
+                      setPreferences({
+                        ...preferences,
+                        experience: e.target.value as Preferences["experience"],
+                      })
+                    }
+                  >
+                    <option value="beginner">Learning the basics</option>
+                    <option value="comfortable">Comfortable building</option>
+                    <option value="experienced">Experienced developer</option>
+                  </select>
+                </label>
+                <label>
+                  Familiar stack
+                  <select
+                    disabled={loading}
+                    value={preferences.stack}
+                    onChange={(e) =>
+                      setPreferences({
+                        ...preferences,
+                        stack: e.target.value as Preferences["stack"],
+                      })
+                    }
+                  >
+                    <option value="next">Next.js + TypeScript</option>
+                    <option value="react">React + Vite</option>
+                    <option value="vanilla">HTML, CSS, JavaScript</option>
+                  </select>
+                </label>
+              </div>
+              <label className="starter-option">
+                <input
+                  type="checkbox"
+                  disabled={loading}
+                  checked={preferences.scaffold}
+                  onChange={(e) =>
+                    setPreferences({
+                      ...preferences,
+                      scaffold: e.target.checked,
+                    })
+                  }
+                />{" "}
+                I already have a working starter project
+              </label>
               {error && (
                 <div className="error-banner" role="alert">
                   <Icon name="flag" size={18} />
@@ -422,7 +416,7 @@ export default function ScopeCutter({ demo }: { demo: boolean }) {
               <div className="form-footnote">
                 <span className="status-dot" />
                 {demo
-                  ? "Demo mode · Try it. No API key needed."
+                  ? "Free planner · Runs in your browser. No API key."
                   : "Powered by OpenAI · Built for realistic first steps."}
               </div>
             </form>
@@ -432,6 +426,81 @@ export default function ScopeCutter({ demo }: { demo: boolean }) {
             </div>
           </div>
         </section>
+        <section className="library-bar">
+          <div>
+            <strong>Your plans, your browser.</strong>
+            <p>No account. Save up to 10 plans with task progress.</p>
+          </div>
+          <button
+            className="copy-button"
+            aria-expanded={libraryOpen}
+            onClick={() => {
+              setSaved(readSaved());
+              setLibraryOpen(!libraryOpen);
+            }}
+          >
+            Saved plans {libraryOpen ? "↑" : "↓"}
+          </button>
+        </section>
+        {libraryOpen && (
+          <section className="saved-library" aria-label="Saved plans">
+            {saved.length === 0 ? (
+              <p>No saved plans yet. Make a cut, then save your plan.</p>
+            ) : (
+              saved.map((p) => (
+                <article key={p.id}>
+                  <div>
+                    <h3>{p.idea}</h3>
+                    <p>
+                      {p.minutes} minutes · {p.preferences.experience} ·{" "}
+                      {new Date(p.savedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div>
+                    <button
+                      className="copy-button"
+                      onClick={() => {
+                        setOutput(p);
+                        setIdea(p.idea);
+                        setMinutes(p.minutes);
+                        setPreferences(p.preferences);
+                        setNotice(
+                          "Saved plan restored. Changes are saved when you click Save this plan.",
+                        );
+                      }}
+                    >
+                      Open plan
+                    </button>
+                    <button
+                      className="copy-button"
+                      onClick={() => removePlan(p.id)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </section>
+        )}
+        <details className="local-ai-guide">
+          <summary>Free planner + optional local AI</summary>
+          <p>
+            The public app uses rules and templates entirely in your browser. No
+            API key is needed, and project ideas are not sent to an AI provider.
+            For custom AI plans, run the project on your own computer and add
+            your own key to the server environment. Provider usage may cost
+            money; it is optional. Production builds always use the free
+            planner.
+          </p>
+          <a
+            href="https://github.com/6kCraze/ai-project-scope-cutter#optional-local-ai"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Local setup instructions ↗
+          </a>
+        </details>
         <section className="examples-strip" aria-label="Example project ideas">
           <span>BIG IDEA ENERGY?</span>
           <div>
@@ -470,125 +539,25 @@ export default function ScopeCutter({ demo }: { demo: boolean }) {
             </div>
           </section>
         )}
+        {notice && (
+          <p className="storage-notice" role="status">
+            {notice}
+          </p>
+        )}
         {output && (
-          <section
-            ref={resultsRef}
-            className="results"
-            tabIndex={-1}
-            aria-labelledby="results-heading"
-          >
-            <div className="results-heading">
-              <div>
-                <span className="eyebrow">
-                  <span className="status-dot" /> YOUR NEXT SHIPPED PROJECT
-                </span>
-                <h2 id="results-heading">
-                  Less, but <span className="accent">launchable.</span>
-                </h2>
-              </div>
-              <CopyButton
-                text={formatScope(output.result)}
-                label="Copy full plan"
-                name="full plan"
-              />
-            </div>
-            <div className="result-meta">
-              <span>
-                <Icon name="clock" size={14} /> {output.minutes}-minute build
-              </span>
-              <span>
-                {output.mode === "demo"
-                  ? "Demo plan · Template-based, not AI-generated"
-                  : "AI-generated · Your focused first version"}
-              </span>
-            </div>
-            <section className="summary-card">
-              <div>
-                <div className="summary-top">
-                  <span className="section-number">01 / THE FOCUS</span>
-                  <CopyButton
-                    text={output.result.mvpSummary}
-                    name="MVP Summary"
-                  />
-                </div>
-                <h3>MVP Summary</h3>
-                <p>{output.result.mvpSummary}</p>
-              </div>
-              <div className="time-stamp">
-                <strong>{output.minutes}</strong>
-                <span>MINUTES TO BUILD</span>
-              </div>
-            </section>
-            <div className="results-grid">
-              <ResultCard
-                title="Build Now"
-                subtitle="This is the entire first version."
-                items={output.result.buildNow}
-                icon="check"
-                tone="keep"
-              />
-              <ResultCard
-                title="Cut for Later"
-                subtitle="Good ideas. Wrong time."
-                items={output.result.cutForLater}
-                icon="cut"
-                tone="cut"
-              />
-              <ResultCard
-                title="Recommended Stack"
-                subtitle="Familiar tools. Fewer moving parts."
-                items={output.result.recommendedStack}
-                icon="stack"
-              />
-              <ResultCard
-                title="Definition of Done"
-                subtitle="When these are true, ship it."
-                items={output.result.definitionOfDone}
-                icon="flag"
-              />
-            </div>
-            <section className="future-card">
-              <div>
-                <span className="section-number">NEXT CHAPTER</span>
-                <h3>Future V2 Features</h3>
-                <p>Earn the next feature by shipping the first.</p>
-                <CopyButton
-                  text={output.result.futureFeatures.join("\n")}
-                  name="Future V2 Features"
-                />
-              </div>
-              <ol>
-                {output.result.futureFeatures.map((item, i) => (
-                  <li key={i}>
-                    <span>0{i + 1}</span>
-                    {item}
-                  </li>
-                ))}
-              </ol>
-            </section>
-            <section className="prompt-card">
-              <div className="prompt-heading">
-                <div>
-                  <span className="section-number">
-                    <Icon name="code" size={15} /> FROM PLAN TO FIRST COMMIT
-                  </span>
-                  <h3>Your AI coding prompt</h3>
-                  <p>Paste into your coding assistant. Start building.</p>
-                </div>
-                <CopyButton
-                  text={output.result.codingPrompt}
-                  label="Copy prompt"
-                  name="coding prompt"
-                />
-              </div>
-              <pre tabIndex={0}>{output.result.codingPrompt}</pre>
-            </section>
-            <p className="result-end">
-              The best next step is a smaller first step.{" "}
-              <a href="#cutter">
-                Cut another idea <span aria-hidden="true">↑</span>
-              </a>
-            </p>
+          <section ref={resultsRef} tabIndex={-1}>
+            <PlanWorkspace
+              key={output.id}
+              plan={output}
+              onChange={(next) => {
+                setOutput(next);
+                if (next.id !== output.id) {
+                  setMinutes(next.minutes);
+                  setNotice("New timebox selected. Save this plan to keep it.");
+                }
+              }}
+              onSave={savePlan}
+            />
           </section>
         )}
         {!output && !loading && (
