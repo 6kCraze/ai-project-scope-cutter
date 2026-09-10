@@ -2,6 +2,8 @@
 
 [![Quality checks](https://github.com/6kCraze/ai-project-scope-cutter/actions/workflows/ci.yml/badge.svg)](https://github.com/6kCraze/ai-project-scope-cutter/actions/workflows/ci.yml)
 
+**Live site:** [ai-project-scope-cutter-six.vercel.app](https://ai-project-scope-cutter-six.vercel.app)
+
 Project Scope Cutter is a small full-stack Next.js app that turns a huge project idea into something you can realistically build in **30 or 60 minutes**.
 
 You give it the version of the idea with every feature you can think of. It gives you back a focused MVP, a short build plan, the features to save for later, a simple tech stack, a definition of done, and a detailed implementation brief.
