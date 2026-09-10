@@ -110,37 +110,6 @@ Restart `npm run dev` after editing the environment file. The API key is only re
 
 OpenAI usage may cost money and is billed to the key owner. It is entirely optional. The public deployment does not accept visitors' keys. Production builds and Vercel deployments always use the free planner, even if a key is accidentally configured. Local AI requires development mode, a key, and demo mode disabled.
 
-## Deploy to Vercel
-
-The project is set up for a standard Vercel deployment. It does not need a database or any other hosted service.
-
-1. Import the GitHub repository into Vercel.
-2. Keep the default Next.js build settings.
-3. Deploy without environment variables to use demo mode.
-4. Push changes to `main` to trigger the connected Vercel deployment.
-5. Keep paid provider keys out of the Vercel environment; AI is a local development option.
-
-The public UI generates plans locally without calling the API. The API route also enforces the free production mode. The app adds no paid services or API usage; hosting remains subject to your Vercel account limits.
-
-## Project structure
-
-```text
-src/
-├── app/
-│   ├── api/scope/route.ts    # OpenAI request and demo fallback
-│   ├── globals.css           # responsive dark UI
-│   ├── layout.tsx            # metadata and fonts
-│   └── page.tsx              # page entry point
-├── components/
-│   ├── scope-cutter.tsx      # form, preferences, local saved-plan library
-│   └── plan-workspace.tsx    # task editing, progress, comparison, export
-└── lib/
-    ├── ai-mode.ts            # production guard for optional local AI
-    ├── planner.ts            # budgets, edited results, saved-plan validation
-    ├── demo.ts               # local demo plan generator
-    └── scope.ts              # types, JSON schema, and validation
-```
-
 ## Validation and testing
 
 The API checks the idea length, selected timebox, request size, content type, and request origin. AI output must match the exact seven-field response contract before it is rendered.
